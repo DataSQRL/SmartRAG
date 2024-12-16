@@ -1,143 +1,123 @@
-<!DOCTYPE html>
-<html>
 <head>
   <title>ChatBot</title>
-  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css">
-  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/@datasqrl/acorn-chatbot/dist/umd/index.js"></script>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/@datasqrl/acorn-chatbot/dist/index.css"
+  />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/@datasqrl/acorn-chatbot/dist/data-grid.css"
+  />
   <style>
-    table th, table td {
-      padding: 0.1rem 0.5rem;
+    body {
+      margin: 0;
+    }
+    #chatbot {
+      height: 100vh;
+      position: relative;
     }
   </style>
 </head>
 <body>
-<div id="content" class="position-fixed w-100 p-3" style="bottom: 70px;">
-  <div id="chatBox" class="container" style="height: 88vh; overflow-y: auto;">
-    <!-- Chat messages will be appended here -->
-    <div id="initialMessage" class="d-flex justify-content-center align-items-center h-100">
-      <div class="text-center display-4 font-weight-bold d-flex flex-column align-items-center">
-        <img src="bot.svg" alt="Assistant" class="mb-3" height="120" width="162">
-        How can I help you today?
-      </div>
-    </div>
-  </div>
-</div>
-<div class="position-fixed w-100 p-3 bg-white" style="bottom: 0;">
-  <div class="container">
-    <input id="messageInput" class="form-control p-4 rounded-pill shadow-sm" style="font-size: 18px;" placeholder="Message your Assistant">
-  </div>
-</div>
-
-
-<!-- Modal -->
-<div class="modal" tabindex="-1" role="dialog" id="userIdModal">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Log in with User ID</h5>
-      </div>
-      <div class="modal-body">
-        <input id="userIdInput" class="form-control" placeholder="User ID">
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-primary" id="saveUserId">Login</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script src="chatbot.js"></script>
-<script>
-  let userId = '';
-
-  function generateRandomString() {
-    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-  }
-
-  $(document).ready(function() {
-    let urlParams = new URLSearchParams(window.location.search);
-    let userIdArgName = urlParams.get('login');
-
-    if (!userIdArgName || userIdArgName !== 'false') {
-      $('#userIdModal').modal({backdrop: 'static', keyboard: false});
-      if (!userIdArgName) {
-        userIdArgName = `userId`;
-      }
-    } else {
-      userId = generateRandomString();
-      $('#userIdModal').modal('hide');
-    }
-
-    $('#saveUserId').prop('disabled', true);
-
-    $('#userIdInput').on('input', function() {
-      let input = $(this);
-      $('#saveUserId').prop('disabled', !input.val());
-    });
-
-    $('#saveUserId').click(function() {
-      userId = $('#userIdInput').val();
-      $('#userIdModal').modal('hide');
-    });
-
-
-    $('#messageInput').keypress(function(e) {
-      if(e.which == 13) {
-        let message = $('#messageInput').val();
-        $('#messageInput').val('');
-        $('#initialMessage').remove();
-
-
-        $('#chatBox').append(`<p class="d-flex align-items-center mb-1" style="height: 20px;"><span><img src="user.svg" alt="User" width="26" height="20" /></span><span class="font-weight-bold ml-2">You</span></p><p class="mt-1">${message}</p>`);
-
-        $.ajax({
-          url: '/messages',
-          type: 'post',
-          dataType: 'json',
-          contentType: 'application/json',
-          data: JSON.stringify({
-            [userIdArgName]: userId,
-            content: message
-          }),
-          beforeSend: function() {
-            $('#chatBox').append(`<p class="d-flex align-items-center mb-1" style="height: 20px;"><span><img src="bot.svg" alt="Assistant" width="27" height="20" /></span><span class="font-weight-bold ml-2">Assistant</span></p>`);
-            // Show spinner
-            $('#chatBox').append('<div id="loading"><div class="spinner-border" role="status"><span class="sr-only">Loading...</span></div><p class="font-italic">I&apos;m looking this up for you - one moment</p></div>');
-            $('#chatBox').scrollTop($('#chatBox')[0].scrollHeight);
-          },
-          complete: function() {
-            // Remove the spinner and the message from the chatbox
-            $('#loading').remove();
-          },
-          success: function(data) {
-            if (data.clientFunction) {
-              let functionCall = data.clientFunction;
-              console.log(functionCall);
-              if (functionCall.name === "data_visualization") {
-                chartData(functionCall.arguments);
-                if (functionCall.arguments.caption) {
-                  $('#chatBox').append(`<div>${functionCall.arguments.caption}</div>`);
-                }
-              } else {
-                console.error("Unrecognized function call: " + functionCall.name);
-              }
-            }
-            else if (data.content) {
-              let contentHtml = marked.parse(data.content);
-              $('#chatBox').append(`<div>${contentHtml}</div>`);
-            } else {
-              console.error("Invalid response: " + data);
-            }
-            // Scroll to the bottom of the chatbox
-            $('#chatBox').scrollTop($('#chatBox')[0].scrollHeight);
+  <div id="chatbot"></div>
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const userIdArgName = urlParams.get("login");
+    const sharedConfig = {
+      history: {
+        initialView: {
+          logoUrl: "./bot.svg",
+        },
+        assistant: {
+          imageUrl: "./bot.svg",
+        },
+      },
+      messageInput: {
+        onPostMessage: async (userMessageText, user) => {
+          const res = await fetch("/messages", {
+            method: "POST",
+            body: JSON.stringify({
+              content: userMessageText,
+              ...user,
+            }),
+          });
+          const data = await res.json();
+          if (res.status !== 200) {
+            const errorMessage =
+              data?.message ||
+              "Failed to process your request. Please try again later.";
+            throw new Error(errorMessage);
           }
-        });
-      }
-    });
-  });
-</script>
+
+          const responseMessage = {
+            type: "chatbotTextMessage",
+            content: data.content,
+          };
+          if (data.clientFunction) {
+            // Test if response message contains Chart
+            if (data.clientFunction.name === "data_visualization") {
+              responseMessage.type = "chatbotChartMessage";
+              responseMessage.chart =
+                AcornChatbot.defaultDataTransformers.dataVisualization(
+                  data.clientFunction.arguments
+                );
+            } else {
+              throw new Error(
+                "Unrecognized function call: " + data.clientFunction.name
+              );
+            }
+          }
+          return responseMessage;
+        },
+      },
+    };
+
+    function generateRandomString() {
+      return (
+        Math.random().toString(36).substring(2, 15) +
+        Math.random().toString(36).substring(2, 15)
+      );
+    }
+    let config =
+      userIdArgName === "false"
+        ? // When query contains `?login=false` disable authentication form
+          {
+            ...sharedConfig,
+            auth: {
+              enabled: false,
+              user: {
+                userId: generateRandomString(),
+                name: "You",
+                imageUrl: "./user.svg",
+              },
+            },
+          }
+        : {
+            ...sharedConfig,
+            auth: {
+              form: {
+                title: "Login with Under ID",
+                fields: [
+                  {
+                    name: userIdArgName || "userId",
+                    placeholder: "User ID",
+                  },
+                ],
+              },
+              onAuthentication: async (user) => {
+                return {
+                  ...user,
+                  // name and icon displayed in a chat
+                  name: "You",
+                  imageUrl: "./user.svg",
+                };
+              },
+            },
+          };
+    const chatbot = AcornChatbot.create(
+      document.getElementById("chatbot"),
+      config
+    );
+  </script>
 </body>
-</html>
